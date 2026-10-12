@@ -1,0 +1,11 @@
+[Unit]
+Description=Build obs-studio-youtube when the repos have a newer obs-studio
+Documentation=https://github.com/elpideus/obs-studio-youtube#updates
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/obs-youtube-update
+Nice=19
+IOSchedulingClass=idle
+CPUWeight=20
+TimeoutStartSec=2h

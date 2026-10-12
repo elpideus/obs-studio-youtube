@@ -1,0 +1,61 @@
+# Maintainer: Stefan Cucoranu <elpideus@gmail.com>
+# Based on the AUR obs-vkcapture PKGBUILD by Manuel Hüsers <aur@huesers.de>
+#
+# obs-vkcapture from the elpideus fork, which adds a "Capture Audio" option to the Game
+# Capture source (records the PipeWire audio of the hooked game process). Replaces
+# obs-vkcapture and lib32-obs-vkcapture, so the 64-bit plugin and both layers always
+# come from the same version.
+
+pkgbase=obs-vkcapture-audio
+pkgname=("$pkgbase" "lib32-$pkgbase")
+pkgver=1.5.6
+_audiorel=1
+pkgrel=1
+pkgdesc='OBS Linux Vulkan/OpenGL game capture, with a Capture Audio option'
+arch=('x86_64')
+url='https://github.com/elpideus/obs-vkcapture'
+license=('GPL-2.0-or-later')
+depends=('vulkan-icd-loader' 'libgl' 'libegl' 'libpipewire' 'obs-studio>=28')
+makedepends=('git' 'cmake' 'vulkan-headers' 'wayland' 'libxcb' 'pipewire'
+             'lib32-gcc-libs' 'lib32-vulkan-icd-loader' 'lib32-libgl' 'lib32-libegl')
+source=("$pkgbase::git+https://github.com/elpideus/obs-vkcapture.git#tag=v${pkgver}-audio${_audiorel}")
+sha256sums=('4f1c9af297259b09b9266dce74b5652d4386a1fcd98bc1e156fa39df2055053c')
+
+build() {
+	cmake -B build -S "$pkgbase" \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DCMAKE_INSTALL_DATADIR=/share \
+		-DCMAKE_BUILD_TYPE=Release
+	cmake --build build
+
+	export CFLAGS="-m32 ${CFLAGS}"
+	export CXXFLAGS="-m32 ${CXXFLAGS}"
+	export LDFLAGS="-m32 ${LDFLAGS}"
+
+	cmake -B build32 -S "$pkgbase" \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib32 \
+		-DCMAKE_INSTALL_DATADIR=/share \
+		-DCMAKE_LIBRARY_PATH=/usr/lib32 \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBUILD_PLUGIN=OFF
+	cmake --build build32
+}
+
+package_obs-vkcapture-audio() {
+	provides=("obs-vkcapture=$pkgver")
+	conflicts=('obs-vkcapture')
+
+	DESTDIR="$pkgdir" cmake --install build
+}
+
+package_lib32-obs-vkcapture-audio() {
+	pkgdesc='OBS Linux Vulkan/OpenGL game capture (32-bit layer of obs-vkcapture-audio)'
+	depends=('lib32-vulkan-icd-loader' 'lib32-libgl' 'lib32-libegl')
+	provides=("lib32-obs-vkcapture=$pkgver")
+	conflicts=('lib32-obs-vkcapture')
+
+	DESTDIR="$pkgdir" cmake --install build32
+	rm -r "$pkgdir/usr/bin"
+}

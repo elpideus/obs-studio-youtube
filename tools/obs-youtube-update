@@ -1,0 +1,132 @@
+#!/bin/bash
+# obs-youtube-update - keep obs-studio-youtube in step with Arch's obs-studio.
+#
+# obs-studio-youtube replaces the repo's obs-studio, so `pacman -Syu` no longer updates OBS.
+# This checks whether the repos carry a newer obs-studio (a new OBS release, or a rebuild after
+# a library update such as ffmpeg) and, if so, regenerates the PKGBUILD from Arch's matching tag
+# and builds it in the background. Installing needs root, so it only notifies; then run
+#   obs-youtube-update --install
+# It also tells you when a new obs-vkcapture is out (the Capture Audio fork then needs a rebase).
+#
+# Usage: obs-youtube-update [--build|--install|--status] [--force]
+#   (none)     check; build if needed; notify   (what the systemd timer/path units run)
+#   --build    same, but also build when the current version only failed before
+#   --install  install the packages built by the last run (asks for your password)
+#   --status   show installed/available versions and pending builds
+set -euo pipefail
+
+REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/obs-studio-youtube"
+STATE="$CACHE/state"
+mkdir -p "$STATE"
+
+mode=check force=false
+for a in "$@"; do
+	case $a in
+		--build) mode=check; force=true ;;
+		--force) force=true ;;
+		--install) mode=install ;;
+		--status) mode=status ;;
+		-h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		*) echo "unknown option: $a" >&2; exit 2 ;;
+	esac
+done
+
+log() { echo "[$(date '+%F %T')] $*"; }
+notify() { notify-send -a "OBS (YouTube build)" -i com.obsproject.Studio "$1" "$2" 2>/dev/null || true; }
+repo_version() { { pacman -Si "$1" 2>/dev/null || true; } | awk '/^Version/{print $3; exit}'; }
+installed_version() { { pacman -Q "$1" 2>/dev/null || true; } | awk '{print $2}'; }
+wait_for_pacman() { for _ in $(seq 360); do [[ -e /var/lib/pacman/db.lck ]] || return 0; sleep 5; done; }
+
+# CachyOS rebuilds Arch packages as <pkgrel>.N; Arch's packaging tag is <pkgver>-<pkgrel>.
+arch_tag() { local v=$1; echo "${v%-*}-$(cut -d. -f1 <<<"${v##*-}")"; }
+
+status() {
+	local repo inst
+	repo=$(repo_version obs-studio); inst=$(installed_version obs-studio-youtube)
+	echo "obs-studio in the repos:      ${repo:-?} (Arch tag $(arch_tag "${repo:-0-0}"))"
+	echo "obs-studio-youtube installed: ${inst:-not installed}"
+	echo "obs-vkcapture in the repos:   $(repo_version obs-vkcapture || true)"
+	vi=$(installed_version obs-vkcapture-audio); echo "obs-vkcapture-audio installed: ${vi:-not installed}"
+	[[ -s $STATE/pending ]] && { echo "built, waiting for --install:"; sed 's/^/  /' "$STATE/pending"; }
+	return 0
+}
+
+install_pending() {
+	[[ -s $STATE/pending ]] || { echo "Nothing to install."; return 0; }
+	mapfile -t pkgs <"$STATE/pending"
+	sudo pacman -U --needed "${pkgs[@]}"
+	rm -f "$STATE/pending"
+}
+
+build_obs() {
+	local tag=$1 work="$CACHE/auto/$1"
+	log "building obs-studio-youtube for Arch tag $tag"
+	rm -rf "$work"
+	python3 -I "$REPO/tools/update-from-arch.py" "$tag" --cache "$CACHE/arch-obs-studio" --out "$work"
+
+	# makepkg runs without -s (no root); report missing build dependencies instead.
+	local missing
+	missing=$(cd "$work" && makepkg --printsrcinfo | awk '/^\t(make)?depends = /{print $3}' | xargs pacman -T || true)
+	if [[ -n $missing ]]; then
+		echo "$tag" >"$STATE/failed"
+		notify "OBS update needs build tools" "Install them, then run obs-youtube-update --build:  sudo pacman -S --needed $(echo $missing)"
+		log "missing dependencies: $missing"
+		return 1
+	fi
+
+	local out="$CACHE/pkg/$tag"
+	mkdir -p "$out" "$CACHE/sources" "$CACHE/build"
+	if ! (cd "$work" && BUILDDIR="$CACHE/build" PKGDEST="$out" SRCDEST="$CACHE/sources" \
+		nice -n 19 ionice -c 3 makepkg -f --nocheck --noconfirm); then
+		echo "$tag" >"$STATE/failed"
+		notify "OBS update build failed" "obs-studio-youtube $tag: see journalctl --user -u obs-youtube-update"
+		return 1
+	fi
+	rm -rf "$CACHE/build/obs-studio-youtube"  # CMakeCache.txt holds your client secret
+	find "$out" -name '*.pkg.tar.*' ! -name '*.sig' | sort >"$STATE/pending"
+	rm -f "$STATE/failed"
+	log "built: $(tr '\n' ' ' <"$STATE/pending")"
+	notify "OBS $tag with YouTube is ready" "Run in a terminal:  obs-youtube-update --install"
+}
+
+check() {
+	wait_for_pacman
+	local repo inst tag
+	repo=$(repo_version obs-studio)
+	inst=$(installed_version obs-studio-youtube)
+	if [[ -z $repo || -z $inst ]]; then
+		log "obs-studio not in the sync database or obs-studio-youtube not installed; nothing to do"
+	else
+		tag=$(arch_tag "$repo")
+		if ldd /usr/bin/obs 2>/dev/null | grep -q 'not found'; then
+			notify "OBS is broken by a library update" "Missing libraries; rebuilding obs-studio-youtube for $tag."
+		fi
+		if [[ $(vercmp "$tag" "$inst") -le 0 ]]; then
+			log "obs-studio-youtube $inst is current (repos: $repo)"
+		elif [[ -s $STATE/pending ]] && grep -q "/$tag/" "$STATE/pending"; then
+			log "$tag already built; waiting for --install"
+			notify "OBS $tag with YouTube is ready" "Run in a terminal:  obs-youtube-update --install"
+		elif ! $force && [[ $(cat "$STATE/failed" 2>/dev/null) == "$tag" ]]; then
+			log "build for $tag failed before; run obs-youtube-update --build to retry"
+		else
+			build_obs "$tag" || true
+		fi
+	fi
+
+	# The Capture Audio fork can't be rebased automatically; just say when upstream moves.
+	local vk_repo vk_inst
+	vk_repo=$(repo_version obs-vkcapture)
+	vk_inst=$(installed_version obs-vkcapture-audio)
+	if [[ -n $vk_repo && -n $vk_inst && $(vercmp "${vk_repo%-*}" "${vk_inst%-*}") -gt 0 &&
+		$(cat "$STATE/vkcapture-notified" 2>/dev/null) != "$vk_repo" ]]; then
+		notify "obs-vkcapture ${vk_repo%-*} is out" "obs-vkcapture-audio is still ${vk_inst%-*}; the fork needs a rebase (see MAINTAINING.md)."
+		echo "$vk_repo" >"$STATE/vkcapture-notified"
+	fi
+}
+
+case $mode in
+	check) check ;;
+	install) install_pending ;;
+	status) status ;;
+esac

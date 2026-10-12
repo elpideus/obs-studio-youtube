@@ -1,0 +1,5 @@
+src/
+pkg/
+*.pkg.tar.*
+*.log
+obs-studio-youtube/obs-studio-youtube*/

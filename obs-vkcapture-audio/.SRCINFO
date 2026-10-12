@@ -1,0 +1,36 @@
+pkgbase = obs-vkcapture-audio
+	pkgdesc = OBS Linux Vulkan/OpenGL game capture, with a Capture Audio option
+	pkgver = 1.5.6
+	pkgrel = 1
+	url = https://github.com/elpideus/obs-vkcapture
+	arch = x86_64
+	license = GPL-2.0-or-later
+	makedepends = git
+	makedepends = cmake
+	makedepends = vulkan-headers
+	makedepends = wayland
+	makedepends = libxcb
+	makedepends = pipewire
+	makedepends = lib32-gcc-libs
+	makedepends = lib32-vulkan-icd-loader
+	makedepends = lib32-libgl
+	makedepends = lib32-libegl
+	depends = vulkan-icd-loader
+	depends = libgl
+	depends = libegl
+	depends = libpipewire
+	depends = obs-studio>=28
+	source = obs-vkcapture-audio::git+https://github.com/elpideus/obs-vkcapture.git#tag=v1.5.6-audio1
+	sha256sums = 4f1c9af297259b09b9266dce74b5652d4386a1fcd98bc1e156fa39df2055053c
+
+pkgname = obs-vkcapture-audio
+	provides = obs-vkcapture=1.5.6
+	conflicts = obs-vkcapture
+
+pkgname = lib32-obs-vkcapture-audio
+	pkgdesc = OBS Linux Vulkan/OpenGL game capture (32-bit layer of obs-vkcapture-audio)
+	depends = lib32-vulkan-icd-loader
+	depends = lib32-libgl
+	depends = lib32-libegl
+	provides = lib32-obs-vkcapture=1.5.6
+	conflicts = lib32-obs-vkcapture

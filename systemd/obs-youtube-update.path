@@ -1,0 +1,9 @@
+[Unit]
+Description=Check for obs-studio updates after pacman transactions (obs-studio-youtube)
+
+[Path]
+PathChanged=/var/lib/pacman/local
+Unit=obs-youtube-update.service
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>obs-studio-youtube</title>
+<meta name="description" content="OBS Studio for Arch Linux with the YouTube account integration (built with your own Google API client) and Game Capture audio.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+<header>
+	<h1>obs-studio-youtube</h1>
+	<p>OBS Studio for Arch Linux and derivatives, with the YouTube account integration and Game Capture audio.</p>
+	<nav>
+		<a href="https://github.com/elpideus/obs-studio-youtube">Source and install guide</a>
+		<a href="https://github.com/elpideus/obs-studio-youtube#google-api-client">Google API client setup</a>
+		<a href="privacy.html">Privacy policy</a>
+	</nav>
+</header>
+
+<h2>What it is</h2>
+<p>Distribution builds of OBS Studio cannot offer YouTube's <em>Connect Account</em> and <em>Manage Broadcast</em>, because those need a Google OAuth client compiled into the program. This project builds the unmodified OBS Studio source with the same options as Arch Linux's package, plus the YouTube integration, using <strong>a Google OAuth client that each user creates for themselves</strong>. With it you can sign in to YouTube from OBS, pick one of your scheduled broadcasts, and use the live chat dock.</p>
+<p>It also packages a fork of <a href="https://github.com/nowrep/obs-vkcapture">obs-vkcapture</a> whose Game Capture source has a <strong>Capture Audio</strong> option, like the Windows one: it records the audio of the game it captures, and nothing else.</p>
+
+<div class="card">
+	<strong>Packages</strong>
+	<ul>
+		<li><code>obs-studio-youtube</code>, <code>obs-studio-youtube-plugin-browser</code>: replace <code>obs-studio</code>, <code>obs-studio-plugin-browser</code></li>
+		<li><code>obs-vkcapture-audio</code>, <code>lib32-obs-vkcapture-audio</code>: replace <code>obs-vkcapture</code>, <code>lib32-obs-vkcapture</code> (<a href="https://github.com/elpideus/obs-vkcapture">fork</a>)</li>
+		<li><code>obs-youtube-update</code>: rebuilds OBS when your repositories update <code>obs-studio</code></li>
+	</ul>
+</div>
+
+<h2>Install</h2>
+<pre><code>git clone https://github.com/elpideus/obs-studio-youtube.git
+cd obs-studio-youtube
+./install.sh</code></pre>
+<p class="muted">The installer asks for your Google OAuth client the first time. See the <a href="https://github.com/elpideus/obs-studio-youtube#google-api-client">setup guide</a>.</p>
+
+<h2>Your data</h2>
+<p>Your YouTube sign-in goes straight from your computer to Google. The sign-in token is stored only in your local OBS configuration. Nothing is sent to this project or to anyone else. Details are in the <a href="privacy.html">privacy policy</a>.</p>
+
+<footer class="muted">
+	Unofficial build, not affiliated with or endorsed by the OBS Project or Google. OBS Studio is free software
+	licensed under the GPL-2.0. Packaging by Stefan Cucoranu.
+</footer>
+</main>
+</body>
+</html>
