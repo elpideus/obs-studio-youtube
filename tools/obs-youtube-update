@@ -59,58 +59,81 @@ install_pending() {
 	rm -f "$STATE/pending"
 }
 
+# build_obs <arch-tag> [pkgrel]: builds <pkgver>-<pkgrel> from Arch's tag (pkgrel defaults to the tag's)
 build_obs() {
-	local tag=$1 work="$CACHE/auto/$1"
-	log "building obs-studio-youtube for Arch tag $tag"
+	local tag=$1 rel=${2:-} ver
+	ver=${tag%-*}-${rel:-${tag##*-}}
+	local work="$CACHE/auto/$ver"
+	log "building obs-studio-youtube $ver (Arch tag $tag)"
 	rm -rf "$work"
-	python3 -I "$REPO/tools/update-from-arch.py" "$tag" --cache "$CACHE/arch-obs-studio" --out "$work"
+	python3 -I "$REPO/tools/update-from-arch.py" "$tag" --cache "$CACHE/arch-obs-studio" --out "$work" ${rel:+--pkgrel "$rel"}
 
 	# makepkg runs without -s (no root); report missing build dependencies instead.
 	local missing
-	missing=$(cd "$work" && makepkg --printsrcinfo | awk '/^\t(make)?depends = /{print $3}' | xargs pacman -T || true)
+	# (obs-studio* entries are the packages being built, e.g. the browser plugin's dependency)
+	missing=$(cd "$work" && makepkg --printsrcinfo | awk '/^\t(make)?depends = /{print $3}' |
+		grep -v '^obs-studio' | xargs -r pacman -T || true)
 	if [[ -n $missing ]]; then
-		echo "$tag" >"$STATE/failed"
+		echo "$ver" >"$STATE/failed"
 		notify "OBS update needs build tools" "Install them, then run obs-youtube-update --build:  sudo pacman -S --needed $(echo $missing)"
 		log "missing dependencies: $missing"
 		return 1
 	fi
 
-	local out="$CACHE/pkg/$tag"
+	local out="$CACHE/pkg/$ver"
 	mkdir -p "$out" "$CACHE/sources" "$CACHE/build"
 	if ! (cd "$work" && BUILDDIR="$CACHE/build" PKGDEST="$out" SRCDEST="$CACHE/sources" \
 		nice -n 19 ionice -c 3 makepkg -f --nocheck --noconfirm); then
-		echo "$tag" >"$STATE/failed"
-		notify "OBS update build failed" "obs-studio-youtube $tag: see journalctl --user -u obs-youtube-update"
+		echo "$ver" >"$STATE/failed"
+		rm -rf "$CACHE/build/obs-studio-youtube"
+		notify "OBS update build failed" "obs-studio-youtube $ver: see journalctl --user -u obs-youtube-update"
 		return 1
 	fi
 	rm -rf "$CACHE/build/obs-studio-youtube"  # CMakeCache.txt holds your client secret
 	find "$out" -name '*.pkg.tar.*' ! -name '*.sig' | sort >"$STATE/pending"
 	rm -f "$STATE/failed"
 	log "built: $(tr '\n' ' ' <"$STATE/pending")"
-	notify "OBS $tag with YouTube is ready" "Run in a terminal:  obs-youtube-update --install"
+	notify "OBS $ver with YouTube is ready" "Run in a terminal:  obs-youtube-update --install"
+}
+
+# Next local pkgrel for rebuilding the same version: 1 -> 1.1, 1.1 -> 1.2
+next_rel() { local r=${1##*-}; [[ $r == *.* ]] && echo "${r%.*}.$((${r##*.} + 1))" || echo "$r.1"; }
+
+# True if a binary or library of obs-studio-youtube itself lost a shared library
+# (other packages' plugins are ignored: rebuilding OBS wouldn't fix them).
+obs_broken() {
+	pacman -Qlq obs-studio-youtube 2>/dev/null | grep -E '(^/usr/bin/obs$|\.so(\.[0-9]+)*$)' |
+		xargs -r ldd 2>/dev/null | grep -q 'not found'
 }
 
 check() {
 	wait_for_pacman
-	local repo inst tag
+	local repo inst tag target="" rel=""
 	repo=$(repo_version obs-studio)
 	inst=$(installed_version obs-studio-youtube)
 	if [[ -z $repo || -z $inst ]]; then
 		log "obs-studio not in the sync database or obs-studio-youtube not installed; nothing to do"
 	else
 		tag=$(arch_tag "$repo")
-		if ldd /usr/bin/obs 2>/dev/null | grep -q 'not found'; then
-			notify "OBS is broken by a library update" "Missing libraries; rebuilding obs-studio-youtube for $tag."
+		if [[ $(vercmp "$tag" "$inst") -gt 0 ]]; then
+			target=$tag  # new OBS release or an Arch rebuild
+		elif obs_broken; then
+			# Same version as the repos, but a library it was built against is gone (e.g. a
+			# CachyOS-only rebuild): rebuild it with a higher local pkgrel so pacman takes it.
+			rel=$(next_rel "$inst")
+			target="${inst%-*}-$rel"
+			notify "OBS is broken by a library update" "Rebuilding obs-studio-youtube as $target in the background."
 		fi
-		if [[ $(vercmp "$tag" "$inst") -le 0 ]]; then
+
+		if [[ -z $target ]]; then
 			log "obs-studio-youtube $inst is current (repos: $repo)"
-		elif [[ -s $STATE/pending ]] && grep -q "/$tag/" "$STATE/pending"; then
-			log "$tag already built; waiting for --install"
-			notify "OBS $tag with YouTube is ready" "Run in a terminal:  obs-youtube-update --install"
-		elif ! $force && [[ $(cat "$STATE/failed" 2>/dev/null) == "$tag" ]]; then
-			log "build for $tag failed before; run obs-youtube-update --build to retry"
+		elif [[ -s $STATE/pending ]] && grep -q "/$target/" "$STATE/pending"; then
+			log "$target already built; waiting for --install"
+			notify "OBS $target with YouTube is ready" "Run in a terminal:  obs-youtube-update --install"
+		elif ! $force && [[ $(cat "$STATE/failed" 2>/dev/null) == "$target" ]]; then
+			log "build for $target failed before; run obs-youtube-update --build to retry"
 		else
-			build_obs "$tag" || true
+			build_obs "$tag" "$rel" || true
 		fi
 	fi
 

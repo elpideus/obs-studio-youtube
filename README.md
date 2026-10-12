@@ -79,6 +79,8 @@ obs-youtube-update --status    # versions and pending builds
 
 Until you install the update, the current OBS keeps working.
 
+There's one more case. A library update can remove a library OBS was built against without the repos shipping a new `obs-studio`, for example a distribution-only rebuild. The helper detects that (with `ldd`, on the package's own files) and rebuilds the same version with a higher local release number (`32.2.2-1` → `32.2.2-1.1`), so pacman accepts it as an update.
+
 New **obs-vkcapture** releases need the fork rebased (see [MAINTAINING.md](MAINTAINING.md)). The helper notifies you when one is out.
 
 ## Uninstall

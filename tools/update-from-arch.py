@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate obs-studio-youtube/ from Arch Linux's obs-studio packaging at a given tag.
 
-Usage: tools/update-from-arch.py [ARCH_TAG] [--cache DIR] [--out DIR]
+Usage: tools/update-from-arch.py [ARCH_TAG] [--cache DIR] [--out DIR] [--pkgrel REL]
   ARCH_TAG   e.g. 32.2.2-1 (default: newest tag in Arch's packaging repo)
 
 Arch's PKGBUILD is kept as close to verbatim as possible. The script only:
@@ -76,7 +76,7 @@ def git(*args, cwd=None):
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout
 
 
-def transform(pkgbuild, tag):
+def transform(pkgbuild, tag, pkgrel=None):
     credits = [l for l in pkgbuild.splitlines() if re.match(r"# (Maintainer|Contributor):", l)]
     if not credits:
         fail("no Maintainer/Contributor lines found")
@@ -87,6 +87,12 @@ def transform(pkgbuild, tag):
     t = HEADER.format(tag=tag, credits=credits) + "\n" + body + "\n"
 
     t = sub_once(t, "pkgbase=obs-studio\n", "pkgbase=obs-studio-youtube\n", "pkgbase")
+    if pkgrel:
+        if not re.fullmatch(r"[0-9]+(\.[0-9]+)?", pkgrel):
+            fail(f"invalid pkgrel {pkgrel!r}")
+        t, n = re.subn(r"^pkgrel=.*$", f"pkgrel={pkgrel}", t, count=1, flags=re.M)
+        if n != 1:
+            fail("pkgrel line not found")
     t = sub_once(t, "pkgname=('obs-studio' 'obs-studio-plugin-browser')\n",
                  "pkgname=('obs-studio-youtube' 'obs-studio-youtube-plugin-browser')\n", "pkgname")
     t = re.sub(r'^pkgdesc="([^"]*)"$',
@@ -131,6 +137,7 @@ def main():
     ap.add_argument("tag", nargs="?")
     ap.add_argument("--cache", default=os.path.expanduser("~/.cache/obs-studio-youtube/arch-obs-studio"))
     ap.add_argument("--out", type=Path, default=OUT, help="package directory to write (default: obs-studio-youtube/)")
+    ap.add_argument("--pkgrel", help="override pkgrel, e.g. 1.1 for a local rebuild against updated libraries")
     a = ap.parse_args()
     out = a.out
 
@@ -153,7 +160,7 @@ def main():
             (out / name).write_bytes(subprocess.run(["git", "show", f"{tag}:{name}"], cwd=cache,
                                                     check=True, capture_output=True).stdout)
     pkgbuild = git("show", f"{tag}:PKGBUILD", cwd=cache)
-    (out / "PKGBUILD").write_text(transform(pkgbuild, tag))
+    (out / "PKGBUILD").write_text(transform(pkgbuild, tag, a.pkgrel))
     (out / ".arch-tag").write_text(tag + "\n")
 
     srcinfo = subprocess.run(["makepkg", "--printsrcinfo"], cwd=out, check=True, capture_output=True, text=True)
