@@ -10,6 +10,7 @@ cd obs-studio-youtube && makepkg -f  # test build (needs your credentials.env)
 
 - Every edit the generator makes is anchored on exact text. If Arch restructures the PKGBUILD, the script stops with "anchor … found N times"; adapt `transform()` in `tools/update-from-arch.py`.
 - `.arch-tag` records which Arch tag the committed PKGBUILD came from. `pkgver-pkgrel` mirrors that tag.
+- Since 33.0.0 Arch builds one package with the browser plugin inside. `obs-studio-youtube` replaces our old `obs-studio-youtube-plugin-browser`, whose exact dependency on `obs-studio-youtube=32.2.2-1` would otherwise block the update.
 - Commit, then push to the AUR (below).
 
 ## New obs-vkcapture release
@@ -29,14 +30,17 @@ Then in `obs-vkcapture-audio/PKGBUILD`, set `pkgver=1.5.7`, `_audiorel=1` and `p
 
 For a fix to the audio feature without a new upstream version, bump `_audiorel` and `pkgrel`.
 
+The fork still installs to `/usr/lib/obs-plugins`. OBS 33 loads that folder as "legacy" and says it will stop in a future update, when the fork's `CMakeLists.txt` has to move to `/usr/lib/obs-modules/plugins` and `/usr/share/obs/obs-modules/plugins`.
+
 ## Publishing to the AUR
 
 Each package base is its own AUR git repository: `obs-studio-youtube` and `obs-vkcapture-audio`. Only `PKGBUILD`, `.SRCINFO` and the files listed in `source=()` belong there.
 
 ```sh
 git clone ssh://aur@aur.archlinux.org/obs-studio-youtube.git /tmp/aur-obs
-cp obs-studio-youtube/{PKGBUILD,.SRCINFO,*.patch} /tmp/aur-obs/
-cd /tmp/aur-obs && git add -A && git commit -m "Update to 32.2.2-1" && git push
+git -C /tmp/aur-obs rm -q --ignore-unmatch '*.patch'
+cp obs-studio-youtube/* obs-studio-youtube/.SRCINFO /tmp/aur-obs/
+cd /tmp/aur-obs && git add -A && git commit -m "Update to 33.0.0-1" && git push
 ```
 
 This needs an AUR account with your SSH public key added. Never put a Google client ID or secret into the AUR, the repo or a PKGBUILD.

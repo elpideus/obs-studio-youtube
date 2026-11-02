@@ -49,6 +49,7 @@ status() {
 	echo "obs-vkcapture in the repos:   $(repo_version obs-vkcapture || true)"
 	vi=$(installed_version obs-vkcapture-audio); echo "obs-vkcapture-audio installed: ${vi:-not installed}"
 	[[ -s $STATE/pending ]] && { echo "built, waiting for --install:"; sed 's/^/  /' "$STATE/pending"; }
+	[[ -s $STATE/failed ]] && echo "last failed build: $(<"$STATE/failed") (retry with --build)"
 	return 0
 }
 
@@ -66,13 +67,17 @@ build_obs() {
 	local work="$CACHE/auto/$ver"
 	log "building obs-studio-youtube $ver (Arch tag $tag)"
 	rm -rf "$work"
-	python3 -I "$REPO/tools/update-from-arch.py" "$tag" --cache "$CACHE/arch-obs-studio" --out "$work" ${rel:+--pkgrel "$rel"}
+	# (check() calls this with `|| true`, which turns off set -e in here)
+	if ! python3 -I "$REPO/tools/update-from-arch.py" "$tag" --cache "$CACHE/arch-obs-studio" --out "$work" ${rel:+--pkgrel "$rel"}; then
+		echo "$ver" >"$STATE/failed"
+		notify "OBS update needs a generator fix" "Arch changed its PKGBUILD: see journalctl --user -u obs-youtube-update and MAINTAINING.md"
+		return 1
+	fi
 
 	# makepkg runs without -s (no root); report missing build dependencies instead.
 	local missing
-	# (obs-studio* entries are the packages being built, e.g. the browser plugin's dependency)
 	missing=$(cd "$work" && makepkg --printsrcinfo | awk '/^\t(make)?depends = /{print $3}' |
-		grep -v '^obs-studio' | xargs -r pacman -T || true)
+		xargs -r pacman -T || true)
 	if [[ -n $missing ]]; then
 		echo "$ver" >"$STATE/failed"
 		notify "OBS update needs build tools" "Install them, then run obs-youtube-update --build:  sudo pacman -S --needed $(echo $missing)"

@@ -5,8 +5,8 @@ Usage: tools/update-from-arch.py [ARCH_TAG] [--cache DIR] [--out DIR] [--pkgrel 
   ARCH_TAG   e.g. 32.2.2-1 (default: newest tag in Arch's packaging repo)
 
 Arch's PKGBUILD is kept as close to verbatim as possible. The script only:
-  - renames the split packages to obs-studio-youtube / obs-studio-youtube-plugin-browser,
-    which provide and conflict with obs-studio / obs-studio-plugin-browser;
+  - renames the package to obs-studio-youtube, which provides and conflicts with obs-studio
+    and replaces the split obs-studio-youtube-plugin-browser of OBS 32 and older;
   - reads the user's own Google OAuth client and passes the YouTube options to cmake;
   - checks that cmake actually enabled the YouTube integration.
 Every edit is anchored on exact text and the script stops if an anchor is missing, so a
@@ -86,18 +86,28 @@ def transform(pkgbuild, tag, pkgrel=None):
 
     t = HEADER.format(tag=tag, credits=credits) + "\n" + body + "\n"
 
-    t = sub_once(t, "pkgbase=obs-studio\n", "pkgbase=obs-studio-youtube\n", "pkgbase")
+    t = sub_once(t, "pkgname=obs-studio\n", "pkgname=obs-studio-youtube\n", "pkgname")
     if pkgrel:
         if not re.fullmatch(r"[0-9]+(\.[0-9]+)?", pkgrel):
             fail(f"invalid pkgrel {pkgrel!r}")
         t, n = re.subn(r"^pkgrel=.*$", f"pkgrel={pkgrel}", t, count=1, flags=re.M)
         if n != 1:
             fail("pkgrel line not found")
-    t = sub_once(t, "pkgname=('obs-studio' 'obs-studio-plugin-browser')\n",
-                 "pkgname=('obs-studio-youtube' 'obs-studio-youtube-plugin-browser')\n", "pkgname")
     t = re.sub(r'^pkgdesc="([^"]*)"$',
                r'pkgdesc="\1 (with YouTube account integration, using your own Google API client)"',
                t, count=1, flags=re.M)
+
+    # Stand in for the repo package. The old browser package must be replaced too: it depends
+    # on obs-studio-youtube=<its own version>, so it would block every later update.
+    t = sub_once(t, 'provides=("obs-studio-plugin-browser=$pkgver")\n',
+                 'provides=("obs-studio=$pkgver" "obs-studio-plugin-browser=$pkgver"'
+                 ' "obs-studio-youtube-plugin-browser=$pkgver")\n', "provides")
+    t = sub_once(t, "conflicts=('obs-studio-plugin-browser')\n",
+                 "conflicts=('obs-studio' 'obs-studio-plugin-browser' 'obs-studio-youtube-plugin-browser')\n",
+                 "conflicts")
+    t = sub_once(t, "replaces=('obs-studio-plugin-browser<=32.2.2')\n",
+                 "replaces=('obs-studio-plugin-browser<=32.2.2' 'obs-studio-youtube-plugin-browser<=32.2.2')\n",
+                 "replaces")
 
     # Credentials helper before build(), loaded and passed to cmake inside it.
     t = sub_once(t, "\nbuild() {\n", "\n" + CREDENTIALS.strip("\n") + "\n\nbuild() {\n"
@@ -113,22 +123,6 @@ def transform(pkgbuild, tag, pkgrel=None):
                  "  # feature-youtube.cmake silently skips the integration if anything is missing\n"
                  "  grep -qs -- '-DYOUTUBE_ENABLED' build/frontend/CMakeFiles/obs-studio.dir/flags.make build/build.ninja \\\n"
                  "    || { error \"cmake did not enable the YouTube integration\"; return 1; }\n", "cmake call")
-
-    # Split packages: rename, provide and conflict with the repo packages.
-    t = sub_once(t, "package_obs-studio() {\n",
-                 "package_obs-studio-youtube() {\n"
-                 "  provides=(\"obs-studio=$pkgver\")\n"
-                 "  conflicts=('obs-studio')\n", "package_obs-studio")
-    t = sub_once(t, "'obs-studio-plugin-browser: CEF-based browser plugin'",
-                 "'obs-studio-youtube-plugin-browser: CEF-based browser plugin'", "browser optdepend")
-    t = sub_once(t, "package_obs-studio-plugin-browser() {\n",
-                 "package_obs-studio-youtube-plugin-browser() {\n"
-                 "  provides=(\"obs-studio-plugin-browser=$pkgver\")\n"
-                 "  conflicts=('obs-studio-plugin-browser')\n", "package_obs-studio-plugin-browser")
-    m = re.search(r"^(  depends=\([^)]*)'obs-studio'([^)]*\))$", t, flags=re.M)
-    if not m:
-        fail("browser plugin depends on 'obs-studio' not found")
-    t = t[:m.start()] + m.group(1) + "\"obs-studio-youtube=${pkgver}-${pkgrel}\"" + m.group(2) + t[m.end():]
     return t
 
 

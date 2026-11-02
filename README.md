@@ -12,8 +12,7 @@ The OBS source is **unmodified upstream**, built with the same options and patch
 
 | Package | Replaces | What |
 |---|---|---|
-| `obs-studio-youtube` | `obs-studio` | OBS Studio + YouTube integration |
-| `obs-studio-youtube-plugin-browser` | `obs-studio-plugin-browser` | Browser source/docks (needed for the chat dock) |
+| `obs-studio-youtube` | `obs-studio` | OBS Studio + YouTube integration, with the browser source and docks built in (as in Arch's package since OBS 33) |
 | `obs-vkcapture-audio` | `obs-vkcapture` | Game Capture with Capture Audio ([fork](https://github.com/elpideus/obs-vkcapture), branch `capture-audio`) |
 | `lib32-obs-vkcapture-audio` | `lib32-obs-vkcapture` | Its 32-bit Vulkan/OpenGL layer |
 
@@ -32,7 +31,7 @@ The installer:
 4. builds and installs `obs-vkcapture-audio` (needs `[multilib]`);
 5. enables `obs-youtube-update` (see [Updates](#updates)).
 
-Options: `--no-vkcapture`, `--no-browser`, `--no-auto-update`, `--new-credentials`. Keep the cloned folder: the update helper runs from it.
+Options: `--no-vkcapture`, `--no-auto-update`, `--new-credentials`. Keep the cloned folder: the update helper runs from it.
 
 Manual build: `cd obs-studio-youtube && makepkg -si` (and the same in `obs-vkcapture-audio/`). The YouTube build reads your client from `~/.config/obs-youtube/credentials.env`, or from `OBS_YOUTUBE_CLIENTID` / `OBS_YOUTUBE_SECRET`. Point `OBS_YOUTUBE_CREDENTIALS` at another file if needed. Clean-chroot builds must pass the environment variables in.
 
@@ -79,7 +78,7 @@ obs-youtube-update --status    # versions and pending builds
 
 Until you install the update, the current OBS keeps working.
 
-There's one more case. A library update can remove a library OBS was built against without the repos shipping a new `obs-studio`, for example a distribution-only rebuild. The helper detects that (with `ldd`, on the package's own files) and rebuilds the same version with a higher local release number (`32.2.2-1` → `32.2.2-1.1`), so pacman accepts it as an update.
+There's one more case. A library update can remove a library OBS was built against without the repos shipping a new `obs-studio`, for example a distribution-only rebuild. The helper detects that (with `ldd`, on the package's own files) and rebuilds the same version with a higher local release number (`33.0.0-1` → `33.0.0-1.1`), so pacman accepts it as an update.
 
 New **obs-vkcapture** releases need the fork rebased (see [MAINTAINING.md](MAINTAINING.md)). The helper notifies you when one is out.
 
@@ -88,7 +87,7 @@ New **obs-vkcapture** releases need the fork rebased (see [MAINTAINING.md](MAINT
 Go back to the repo packages; pacman offers to replace them:
 
 ```sh
-sudo pacman -S obs-studio obs-studio-plugin-browser obs-vkcapture lib32-obs-vkcapture
+sudo pacman -S obs-studio obs-vkcapture lib32-obs-vkcapture
 systemctl --user disable --now obs-youtube-update.timer obs-youtube-update.path
 rm ~/.local/bin/obs-youtube-update ~/.config/systemd/user/obs-youtube-update.*
 ```

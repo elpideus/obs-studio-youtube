@@ -1,13 +1,13 @@
 #!/bin/bash
 # install.sh - build and install, on Arch Linux and derivatives (CachyOS, EndeavourOS, ...):
-#   obs-studio-youtube (+ -plugin-browser)  OBS Studio with the YouTube account integration,
-#                                           built with your own Google OAuth client
-#   obs-vkcapture-audio (+ lib32-)          Game Capture with a "Capture Audio" option
-#   obs-youtube-update                      rebuilds OBS when the repos update obs-studio
-# They replace obs-studio, obs-studio-plugin-browser, obs-vkcapture and lib32-obs-vkcapture;
-# pacman asks before removing those.
+#   obs-studio-youtube             OBS Studio with the YouTube account integration,
+#                                  built with your own Google OAuth client
+#   obs-vkcapture-audio (+ lib32-) Game Capture with a "Capture Audio" option
+#   obs-youtube-update             rebuilds OBS when the repos update obs-studio
+# They replace obs-studio, obs-vkcapture and lib32-obs-vkcapture; pacman asks before removing
+# those.
 #
-# Usage: ./install.sh [--no-vkcapture] [--no-browser] [--no-auto-update] [--new-credentials]
+# Usage: ./install.sh [--no-vkcapture] [--no-auto-update] [--new-credentials]
 set -euo pipefail
 
 REPO=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
@@ -15,11 +15,10 @@ CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/obs-youtube"
 CRED="$CONF_DIR/credentials.env"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/obs-studio-youtube"
 
-want_vk=true want_browser=true want_update=true new_cred=false
+want_vk=true want_update=true new_cred=false
 for a in "$@"; do
 	case $a in
 		--no-vkcapture) want_vk=false ;;
-		--no-browser) want_browser=false ;;
 		--no-auto-update) want_update=false ;;
 		--new-credentials) new_cred=true ;;
 		-h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -101,8 +100,7 @@ say "Building OBS Studio (takes a few minutes)"
 mapfile -t obs_pkgs < <(build "$work" obs-studio-youtube)
 rm -rf "$CACHE/build/obs-studio-youtube"  # its CMakeCache.txt contains your client secret
 [[ ${#obs_pkgs[@]} -gt 0 ]] || die "building obs-studio-youtube failed (see the output above)"
-$want_browser || mapfile -t obs_pkgs < <(printf '%s\n' "${obs_pkgs[@]}" | grep -v -- '-plugin-browser-')
-say "Installing (pacman will offer to replace obs-studio; answer y)"
+say "Installing (pacman will offer to replace obs-studio and any older browser plugin package; answer y)"
 sudo pacman -U --needed "${obs_pkgs[@]}"
 
 # --- 3. Game Capture with Capture Audio -----------------------------------------------------
